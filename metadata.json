@@ -1,0 +1,5 @@
+{
+  "name": "CS0025 Online Grading Sheet",
+  "description": "A web application for professors to encode student grades using a rubric-based grading sheet for title proposal presentations. It includes features for admins to manage users, assign panels, and view aggregated results.",
+  "requestFramePermissions": []
+}
