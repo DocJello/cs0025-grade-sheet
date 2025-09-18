@@ -7,35 +7,27 @@ import { EditIcon, TrashIcon, InfoIcon } from '../components/Icons';
 declare const XLSX: any; // From SheetJS CDN
 
 interface GroupModalProps {
-    sheet: Omit<GradeSheet, '$id' | 'status'> | GradeSheet | null;
+    sheet: Omit<GradeSheet, 'id' | 'status'> | GradeSheet | null;
     onClose: () => void;
-    onSave: (data: Omit<GradeSheet, '$id' | 'status'> | GradeSheet) => Promise<void>;
+    onSave: (data: Omit<GradeSheet, 'id' | 'status'> | GradeSheet) => void;
 }
 
 const GroupModal: React.FC<GroupModalProps> = ({ sheet, onClose, onSave }) => {
     const [groupName, setGroupName] = useState(sheet?.groupName || '');
     const [proponents, setProponents] = useState(sheet?.proponents.map(p => p.name).join(', ') || '');
-    const [selectedTitle, setSelectedTitle] = useState(sheet?.selectedTitle || 'Untitled Project');
+    const [selectedTitle, setSelectedTitle] = useState(sheet?.selectedTitle || '');
     const [program, setProgram] = useState(sheet?.program || '');
-    const [date, setDate] = useState(sheet?.date || 'Not Set');
-    const [venue, setVenue] = useState(sheet?.venue || 'Not Set');
-    const [isSaving, setIsSaving] = useState(false);
-    const [error, setError] = useState('');
+    const [date, setDate] = useState(sheet?.date || '');
+    const [venue, setVenue] = useState(sheet?.venue || '');
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        setError('');
         
         const proponentList: Student[] = proponents
             .split(',')
             .map(name => name.trim())
             .filter(name => name)
             .map((name, index) => ({ id: sheet?.proponents[index]?.id || `s_new_${index}_${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, name }));
-
-        if (proponentList.length < 3 || proponentList.length > 4) {
-            setError("A group must have between 3 and 4 proponents.");
-            return;
-        }
             
         const baseData = {
             groupName,
@@ -49,18 +41,13 @@ const GroupModal: React.FC<GroupModalProps> = ({ sheet, onClose, onSave }) => {
             panel2Id: sheet?.panel2Id || '',
         };
 
-        setIsSaving(true);
-        try {
-            if (sheet && '$id' in sheet) {
-                await onSave({ ...sheet, ...baseData });
-            } else {
-                await onSave(baseData);
-            }
-            onClose();
-        } catch (err: any) {
-            setError(err.message || 'Failed to save group.');
-            setIsSaving(false);
+        if (sheet && 'id' in sheet) {
+            onSave({ ...sheet, ...baseData });
+        } else {
+            onSave(baseData);
         }
+        
+        onClose();
     };
 
     return (
@@ -89,12 +76,19 @@ const GroupModal: React.FC<GroupModalProps> = ({ sheet, onClose, onSave }) => {
                         <label className="block text-sm font-medium text-gray-700">Project Title</label>
                         <input type="text" value={selectedTitle} onChange={e => setSelectedTitle(e.target.value)} required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500"/>
                     </div>
-                    {error && <p className="text-sm text-red-600">{error}</p>}
+                    <div className="flex space-x-4">
+                        <div className="flex-1">
+                             <label className="block text-sm font-medium text-gray-700">Date / Time</label>
+                            <input type="datetime-local" value={date} onChange={e => setDate(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500"/>
+                        </div>
+                        <div className="flex-1">
+                            <label className="block text-sm font-medium text-gray-700">Venue</label>
+                            <input type="text" value={venue} onChange={e => setVenue(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500"/>
+                        </div>
+                    </div>
                     <div className="flex justify-end space-x-2 pt-4">
                         <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Cancel</button>
-                        <button type="submit" disabled={isSaving} className="px-4 py-2 bg-green-700 text-white rounded-md hover:bg-green-800 disabled:bg-green-400">
-                            {isSaving ? 'Saving...' : 'Save Group'}
-                        </button>
+                        <button type="submit" className="px-4 py-2 bg-green-700 text-white rounded-md hover:bg-green-800">Save Group</button>
                     </div>
                 </form>
             </div>
@@ -116,7 +110,7 @@ const GroupManagement: React.FC<GroupManagementProps> = ({ setPage }) => {
         if (!file) return;
 
         const reader = new FileReader();
-        reader.onload = async (e) => {
+        reader.onload = (e) => {
             const data = new Uint8Array(e.target?.result as ArrayBuffer);
             const workbook = XLSX.read(data, { type: 'array' });
             const sheetName = workbook.SheetNames[0];
@@ -165,7 +159,7 @@ const GroupManagement: React.FC<GroupManagementProps> = ({ setPage }) => {
                     continue;
                 }
 
-                const newSheet: Omit<GradeSheet, '$id' | 'status'> = {
+                const newSheet: Omit<GradeSheet, 'id' | 'status'> = {
                     groupName,
                     proponents: proponents.map((name, index) => ({ id: `s_upload_${i}_${index}_${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, name })),
                     program: (row[programIndex] || '') as GradeSheet['program'],
@@ -176,12 +170,8 @@ const GroupManagement: React.FC<GroupManagementProps> = ({ setPage }) => {
                     panel1Id: '',
                     panel2Id: '',
                 };
-                try {
-                    await addGradeSheet(newSheet);
-                    addedCount++;
-                } catch (err) {
-                    errors.push(`Row ${i + 1}: Failed to add group "${groupName}". Server error.`);
-                }
+                addGradeSheet(newSheet);
+                addedCount++;
             }
             
             let alertMessage = `${addedCount} group(s) added successfully.`;
@@ -205,21 +195,17 @@ const GroupManagement: React.FC<GroupManagementProps> = ({ setPage }) => {
         setIsModalOpen(true);
     };
 
-    const handleDelete = async (sheetId: string) => {
+    const handleDelete = (sheetId: string) => {
         if (window.confirm('Are you sure you want to delete this group? All associated data will be lost.')) {
-            try {
-                await deleteGradeSheet(sheetId);
-            } catch (error) {
-                alert("Failed to delete group.");
-            }
+            deleteGradeSheet(sheetId);
         }
     };
     
-    const handleSave = async (data: Omit<GradeSheet, '$id' | 'status'> | GradeSheet) => {
-        if ('$id' in data) {
-            await updateGradeSheet(data);
+    const handleSave = (data: Omit<GradeSheet, 'id' | 'status'> | GradeSheet) => {
+        if ('id' in data) {
+            updateGradeSheet(data);
         } else {
-            await addGradeSheet(data);
+            addGradeSheet(data);
         }
     };
 
@@ -239,14 +225,14 @@ const GroupManagement: React.FC<GroupManagementProps> = ({ setPage }) => {
                         {gradeSheets.length > 0 ? (
                             <ul className="divide-y divide-gray-200">
                                 {gradeSheets.map(sheet => (
-                                    <li key={sheet.$id} className="py-3 flex items-center justify-between">
+                                    <li key={sheet.id} className="py-3 flex items-center justify-between">
                                         <div>
                                             <p className="text-base font-medium text-black">{sheet.groupName}</p>
                                             <p className="text-sm text-gray-800">{sheet.proponents.length} members</p>
                                         </div>
                                         <div className="space-x-2">
                                             <button onClick={() => handleEdit(sheet)} className="text-green-700 hover:text-green-900 p-1"><EditIcon className="w-5 h-5"/></button>
-                                            <button onClick={() => handleDelete(sheet.$id)} className="text-red-600 hover:text-red-900 p-1"><TrashIcon className="w-5 h-s"/></button>
+                                            <button onClick={() => handleDelete(sheet.id)} className="text-red-600 hover:text-red-900 p-1"><TrashIcon className="w-5 h-s"/></button>
                                         </div>
                                     </li>
                                 ))}

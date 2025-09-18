@@ -63,8 +63,7 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateToGradeSheet }) => {
 
     const isAdminOrAdviser = currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.COURSE_ADVISER;
     
-    // FIX: Use `.$id` instead of `.id` to match the User type.
-    const allSheets = isAdminOrAdviser ? gradeSheets : getPanelSheets(currentUser.$id);
+    const allSheets = isAdminOrAdviser ? gradeSheets : getPanelSheets(currentUser.id);
 
     const displaySheets = allSheets.filter(sheet => {
         if (!isAdminOrAdviser || filter === 'All') return true;
@@ -209,8 +208,7 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateToGradeSheet }) => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 no-print">
                 {displaySheets.length > 0 ? (
                     displaySheets.map(sheet => (
-                        // FIX: Use `.$id` instead of `.id` for the key and event handler.
-                        <GradeSheetCard key={sheet.$id} sheet={sheet} onView={() => handleViewSheet(sheet.$id)} />
+                        <GradeSheetCard key={sheet.id} sheet={sheet} onView={() => handleViewSheet(sheet.id)} />
                     ))
                 ) : (
                     <p className="text-gray-500 col-span-full">No grading sheets found for the selected filter.</p>
@@ -232,8 +230,7 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateToGradeSheet }) => {
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                         {displaySheets.map(sheet => (
-                            // FIX: Use `.$id` instead of `.id` for the key.
-                            <tr key={sheet.$id}>
+                            <tr key={sheet.id}>
                                 <td className="px-4 py-2">{sheet.groupName}</td>
                                 <td className="px-4 py-2">{findUserById(sheet.panel1Id)?.name || 'N/A'}</td>
                                 <td className="px-4 py-2">{getPanelStatus(sheet.panel1Grades)}</td>

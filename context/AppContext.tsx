@@ -1,118 +1,84 @@
-
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
-import { User, UserRole, GradeSheet, GradeSheetStatus, PanelGrades } from '../types';
-// FIX: The `users` service is no longer available on the client. It is imported as `null` from `lib/appwrite`.
-import { account, databases, users as appwriteUsers, DATABASE_ID, PROFILES_COLLECTION_ID, GRADESHEETS_COLLECTION_ID, VENUES_COLLECTION_ID, ID, Query } from '../lib/appwrite';
-import { Models } from 'appwrite';
+import { User, UserRole, GradeSheet, GradeSheetStatus } from '../types';
+
+// Dummy data
+const initialUsers: User[] = [
+    { id: 'u1', name: 'Dr. Admin', email: 'admin@example.com', role: UserRole.ADMIN, passwordHash: '123' },
+    { id: 'u2', name: 'Dr. Angelo C. Arguson', email: 'acarguson@feutech.edu.ph', role: UserRole.COURSE_ADVISER, passwordHash: '123' },
+    { id: 'u3', name: 'Prof. Elisa V. Malasaga', email: 'evmalasaga@feutech.edu.ph', role: UserRole.COURSE_ADVISER, passwordHash: '123' },
+    { id: 'u4', name: 'Dr. Beau Gray M. Habal', email: 'bmhabal@feutech.edu.ph', role: UserRole.PANEL, passwordHash: '123' },
+    { id: 'u5', name: 'Mr. Jeneffer A. Sabonsolin', email: 'jasabonsolin@feutech.edu.ph', role: UserRole.PANEL, passwordHash: '123' },
+    { id: 'u6', name: 'Dr. Shaneth C. Ambat', email: 'scambat@feutech.edu.ph', role: UserRole.PANEL, passwordHash: '123' },
+];
+
+const initialGradeSheets: GradeSheet[] = [];
 
 interface AppContextType {
     currentUser: User | null;
     users: User[];
     gradeSheets: GradeSheet[];
     venues: string[];
-    isLoading: boolean;
-    login: (email: string, pass: string) => Promise<void>;
-    logout: () => Promise<void>;
+    login: (email: string, pass: string) => boolean;
+    logout: () => void;
     findUserById: (id: string) => User | undefined;
     getPanelSheets: (panelId: string) => GradeSheet[];
-    updateGradeSheet: (sheet: GradeSheet) => Promise<void>;
-    addGradeSheet: (sheetData: Omit<GradeSheet, '$id' | 'status'>) => Promise<void>;
-    deleteGradeSheet: (sheetId: string) => Promise<void>;
-    // FIX: Changed passwordHash to password to match client SDK expectations.
-    addUser: (userData: Omit<User, '$id' | 'userId'> & { password: string }) => Promise<void>;
-    updateUser: (user: User) => Promise<void>;
-    deleteUser: (userId: string) => Promise<void>;
-    changePassword: (oldPass: string, newPass: string) => Promise<boolean>;
-    addVenue: (venue: string) => Promise<void>;
+    updateGradeSheet: (sheet: GradeSheet) => void;
+    addGradeSheet: (sheetData: Omit<GradeSheet, 'id' | 'status'>) => void;
+    deleteGradeSheet: (sheetId: string) => void;
+    addUser: (userData: Omit<User, 'id'>) => void;
+    updateUser: (user: User) => void;
+    deleteUser: (userId: string) => void;
+    changePassword: (oldPass: string, newPass: string) => boolean;
+    addVenue: (venue: string) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// Helper to parse grade sheet documents from Appwrite
-// FIX: Cast `doc` to `any` to access custom collection attributes.
-const parseGradeSheetDoc = (doc: Models.Document): GradeSheet => ({
-    ...doc,
-    $id: doc.$id,
-    proponents: JSON.parse((doc as any).proponents || '[]'),
-    panel1Grades: (doc as any).panel1Grades ? JSON.parse((doc as any).panel1Grades) : undefined,
-    panel2Grades: (doc as any).panel2Grades ? JSON.parse((doc as any).panel2Grades) : undefined,
-} as unknown as GradeSheet);
-
-
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const [currentUser, setCurrentUser] = useState<User | null>(null);
-    const [users, setUsers] = useState<User[]>([]);
-    const [gradeSheets, setGradeSheets] = useState<GradeSheet[]>([]);
-    const [venues, setVenues] = useState<string[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const [currentUser, setCurrentUser] = useState<User | null>(() => {
+        const storedUser = localStorage.getItem('currentUser');
+        return storedUser ? JSON.parse(storedUser) : null;
+    });
+    const [users, setUsers] = useState<User[]>(() => {
+        const storedUsers = localStorage.getItem('users');
+        return storedUsers ? JSON.parse(storedUsers) : initialUsers;
+    });
+    const [gradeSheets, setGradeSheets] = useState<GradeSheet[]>(() => {
+        const storedSheets = localStorage.getItem('gradeSheets');
+        return storedSheets ? JSON.parse(storedSheets) : initialGradeSheets;
+    });
+    const [venues, setVenues] = useState<string[]>(['Room 404', 'Room 405', 'Auditorium']);
 
-    const fetchAllData = async (authUserId: string) => {
-        try {
-            const [profileResponse, usersResponse, sheetsResponse, venuesResponse] = await Promise.all([
-                databases.listDocuments(DATABASE_ID, PROFILES_COLLECTION_ID, [Query.equal('userId', authUserId)]),
-                databases.listDocuments(DATABASE_ID, PROFILES_COLLECTION_ID, [Query.limit(100)]),
-                databases.listDocuments(DATABASE_ID, GRADESHEETS_COLLECTION_ID, [Query.limit(100)]),
-                databases.listDocuments(DATABASE_ID, VENUES_COLLECTION_ID, [Query.limit(100)])
-            ]);
-            
-            if (profileResponse.documents.length > 0) {
-                 setCurrentUser(profileResponse.documents[0] as unknown as User);
-            } else {
-                 throw new Error("User profile not found.");
-            }
-            
-            setUsers(usersResponse.documents as unknown as User[]);
-            setGradeSheets(sheetsResponse.documents.map(parseGradeSheetDoc));
-            setVenues(venuesResponse.documents.map(v => v.name));
-
-        } catch (error) {
-            console.error("Failed to fetch data:", error);
-            // If fetching fails, logout to ensure a clean state
-            await logout();
-        }
-    };
-    
     useEffect(() => {
-        const checkSession = async () => {
-            try {
-                const session = await account.get();
-                await fetchAllData(session.$id);
-            } catch (error) {
-                // Not logged in
-                setCurrentUser(null);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        checkSession();
-    }, []);
-
-    const login = async (email: string, pass: string) => {
-        setIsLoading(true);
-        try {
-            const session = await account.createEmailPasswordSession(email, pass);
-            await fetchAllData(session.userId);
-        } catch (error) {
-            console.error("Login failed:", error);
-            throw error; // Rethrow to be caught by the login page
-        } finally {
-            setIsLoading(false);
+        if (currentUser) {
+            localStorage.setItem('currentUser', JSON.stringify(currentUser));
+        } else {
+            localStorage.removeItem('currentUser');
         }
+    }, [currentUser]);
+
+    useEffect(() => {
+        localStorage.setItem('users', JSON.stringify(users));
+    }, [users]);
+
+    useEffect(() => {
+        localStorage.setItem('gradeSheets', JSON.stringify(gradeSheets));
+    }, [gradeSheets]);
+
+    const login = (email: string, pass: string): boolean => {
+        const user = users.find(u => u.email === email && u.passwordHash === pass);
+        if (user) {
+            setCurrentUser(user);
+            return true;
+        }
+        return false;
     };
 
-    const logout = async () => {
-        try {
-            await account.deleteSession('current');
-        } catch (error) {
-            console.error("Logout failed:", error);
-        }
+    const logout = () => {
         setCurrentUser(null);
-        setUsers([]);
-        setGradeSheets([]);
-        setVenues([]);
     };
 
-    const findUserById = (id: string): User | undefined => users.find(u => u.$id === id);
+    const findUserById = (id: string): User | undefined => users.find(u => u.id === id);
 
     const getPanelSheets = (panelId: string): GradeSheet[] =>
         gradeSheets.filter(sheet => sheet.panel1Id === panelId || sheet.panel2Id === panelId);
@@ -131,117 +97,54 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return GradeSheetStatus.NOT_STARTED;
     };
     
-    const updateGradeSheet = async (sheet: GradeSheet) => {
+    const updateGradeSheet = (sheet: GradeSheet) => {
         const updatedSheetWithStatus = { ...sheet, status: updateGradeSheetStatus(sheet) };
-        const { $id, ...dataToUpdate } = updatedSheetWithStatus;
-
-        // Prepare data for Appwrite by stringifying complex objects
-        const payload = {
-            ...dataToUpdate,
-            proponents: JSON.stringify(dataToUpdate.proponents),
-            panel1Grades: dataToUpdate.panel1Grades ? JSON.stringify(dataToUpdate.panel1Grades) : null,
-            panel2Grades: dataToUpdate.panel2Grades ? JSON.stringify(dataToUpdate.panel2Grades) : null,
-        };
-
-        await databases.updateDocument(DATABASE_ID, GRADESHEETS_COLLECTION_ID, $id, payload);
-        setGradeSheets(prev => prev.map(s => s.$id === $id ? updatedSheetWithStatus : s));
+        setGradeSheets(prev => prev.map(s => s.id === sheet.id ? updatedSheetWithStatus : s));
     };
 
-    const addGradeSheet = async (sheetData: Omit<GradeSheet, '$id' | 'status'>) => {
+    const addGradeSheet = (sheetData: Omit<GradeSheet, 'id' | 'status'>) => {
         const newSheet: GradeSheet = {
             ...sheetData,
-            $id: '', // will be replaced by appwrite response
+            id: `gs_${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             status: GradeSheetStatus.NOT_STARTED,
         };
-
-        const payload = {
-            ...newSheet,
-            proponents: JSON.stringify(newSheet.proponents),
-        };
-        delete (payload as any).$id; // Remove placeholder id
-
-        const newDoc = await databases.createDocument(DATABASE_ID, GRADESHEETS_COLLECTION_ID, ID.unique(), payload);
-        setGradeSheets(prev => [...prev, parseGradeSheetDoc(newDoc)]);
+        setGradeSheets(prev => [...prev, newSheet]);
     };
     
-    const deleteGradeSheet = async (sheetId: string) => {
-        await databases.deleteDocument(DATABASE_ID, GRADESHEETS_COLLECTION_ID, sheetId);
-        setGradeSheets(prev => prev.filter(s => s.$id !== sheetId));
+    const deleteGradeSheet = (sheetId: string) => {
+        setGradeSheets(prev => prev.filter(s => s.id !== sheetId));
     };
 
-    // FIX: Changed passwordHash to password to match client SDK expectations.
-    const addUser = async (userData: Omit<User, '$id' | 'userId'> & { password: string }) => {
-        // FIX: The `Users` service is not available in the client SDK. This functionality requires a backend implementation (e.g., Appwrite Functions).
-        if (!appwriteUsers) {
-            throw new Error("Admin user creation is not supported on the client-side. This requires a backend implementation.");
-        }
-        // This is an admin action and requires appropriate permissions in Appwrite
-        // FIX: Use `appwriteUsers` instead of `users` to call the Appwrite service.
-        // FIX: Pass undefined for optional phone param and use plaintext password.
-        const authUser = await appwriteUsers.create(ID.unique(), userData.email, undefined, userData.password, userData.name);
-        
-        const profileData = {
-            userId: authUser.$id,
-            name: userData.name,
-            email: userData.email,
-            role: userData.role,
+    const addUser = (userData: Omit<User, 'id'>) => {
+        const newUser: User = {
+            ...userData,
+            id: `u_${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         };
-        
-        const newProfileDoc = await databases.createDocument(DATABASE_ID, PROFILES_COLLECTION_ID, ID.unique(), profileData);
-        setUsers(prev => [...prev, newProfileDoc as unknown as User]);
+        setUsers(prev => [...prev, newUser]);
     };
 
-    const updateUser = async (user: User) => {
-        // FIX: The `Users` service is not available in the client SDK. This functionality requires a backend implementation (e.g., Appwrite Functions).
-        if (!appwriteUsers) {
-            throw new Error("Admin user updates are not supported on the client-side. This requires a backend implementation.");
-        }
-        const { $id, userId, ...profileData } = user;
-        // userId should not be updated.
-        await databases.updateDocument(DATABASE_ID, PROFILES_COLLECTION_ID, $id, profileData);
-        
-        // Also update name in Auth if it changed
-        // FIX: Use `appwriteUsers` instead of `users` to call the Appwrite service.
-        const currentAuthUser = await appwriteUsers.get(userId);
-        if (currentAuthUser.name !== user.name) {
-            // FIX: Use `appwriteUsers` instead of `users` to call the Appwrite service.
-            await appwriteUsers.updateName(userId, user.name);
-        }
-
-        setUsers(prev => prev.map(u => u.$id === $id ? user : u));
-        if (currentUser?.$id === $id) {
+    const updateUser = (user: User) => {
+        setUsers(prev => prev.map(u => u.id === user.id ? user : u));
+        if (currentUser?.id === user.id) {
             setCurrentUser(user);
         }
     };
     
-    const deleteUser = async (userId: string) => {
-        // FIX: The `Users` service is not available in the client SDK. This functionality requires a backend implementation (e.g., Appwrite Functions).
-        if (!appwriteUsers) {
-            throw new Error("Admin user deletion is not supported on the client-side. This requires a backend implementation.");
-        }
-        const userToDelete = users.find(u => u.$id === userId);
-        if (!userToDelete) return;
-
-        // Delete profile document first, then auth user
-        await databases.deleteDocument(DATABASE_ID, PROFILES_COLLECTION_ID, userId);
-        // FIX: Use `appwriteUsers` instead of `users` to call the Appwrite service.
-        await appwriteUsers.delete(userToDelete.userId);
-        setUsers(prev => prev.filter(u => u.$id !== userId));
+    const deleteUser = (userId: string) => {
+        setUsers(prev => prev.filter(u => u.id !== userId));
     };
 
-    const changePassword = async (oldPass: string, newPass: string): Promise<boolean> => {
-        try {
-            await account.updatePassword(newPass, oldPass);
+    const changePassword = (oldPass: string, newPass: string): boolean => {
+        if (currentUser && currentUser.passwordHash === oldPass) {
+            const updatedUser = { ...currentUser, passwordHash: newPass };
+            updateUser(updatedUser);
             return true;
-        } catch (error) {
-            console.error("Failed to change password", error);
-            return false;
         }
+        return false;
     };
 
-    const addVenue = async (venue: string) => {
+    const addVenue = (venue: string) => {
         if (venue && !venues.includes(venue)) {
-            await databases.createDocument(DATABASE_ID, VENUES_COLLECTION_ID, ID.unique(), { name: venue });
             setVenues(prev => [...prev, venue]);
         }
     };
@@ -251,7 +154,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         users,
         gradeSheets,
         venues,
-        isLoading,
         login,
         logout,
         findUserById,

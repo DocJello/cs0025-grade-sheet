@@ -7,10 +7,9 @@ import { EditIcon, TrashIcon } from '../components/Icons';
 declare const XLSX: any; // From SheetJS CDN
 
 interface UserModalProps {
-    user: Omit<User, '$id'> | User | null;
+    user: Omit<User, 'id'> | User | null;
     onClose: () => void;
-    // FIX: Changed passwordHash to password to align with client SDK expectations.
-    onSave: (user: Omit<User, '$id' | 'userId'> & { password: string } | User) => Promise<void>;
+    onSave: (user: Omit<User, 'id'> | User) => void;
 }
 
 const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave }) => {
@@ -21,17 +20,16 @@ const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave }) => {
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [error, setError] = useState('');
-    const [isSaving, setIsSaving] = useState(false);
 
-    const isEditing = user && '$id' in user;
+    const isEditing = user && 'id' in user;
     const canChangeRole = currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.COURSE_ADVISER;
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
         
-        if (!isEditing && password.length < 8) {
-             setError('Password must be at least 8 characters for new users.');
+        if (!isEditing && password.length < 1) {
+             setError('Password is required for new users.');
              return;
         }
 
@@ -39,27 +37,19 @@ const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave }) => {
             setError('Passwords do not match.');
             return;
         }
-        
-        setIsSaving(true);
-        try {
-            const baseData = { name, email, role };
-            // FIX: Changed passwordHash to password.
-            let finalData: (Omit<User, '$id' | 'userId'> & { password: string }) | User;
 
-            if (isEditing) {
-                // Password updates for other users are complex and should be handled separately
-                // For simplicity, this modal only updates profile data.
-                finalData = { ...user, ...baseData };
-            } else {
-                finalData = { ...baseData, password: password };
-            }
-            
-            await onSave(finalData);
-            onClose();
-        } catch (err: any) {
-            setError(err.message || "Failed to save user.");
-            setIsSaving(false);
+        const baseData = { name, email, role };
+        let finalData: Omit<User, 'id'> | User;
+
+        if (isEditing) {
+            const passwordHash = password ? password : user.passwordHash;
+            finalData = { ...user, ...baseData, passwordHash };
+        } else {
+            finalData = { ...baseData, passwordHash: password };
         }
+        
+        onSave(finalData);
+        onClose();
     };
 
     return (
@@ -81,24 +71,18 @@ const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave }) => {
                             {USER_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
                         </select>
                     </div>
-                    {!isEditing && (
-                        <>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">Password</label>
-                                <input type="password" placeholder={"Enter password (min 8 chars)"} autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} required={!isEditing} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500"/>
-                            </div>
-                             <div>
-                                <label className="block text-sm font-medium text-gray-700">Confirm Password</label>
-                                <input type="password" placeholder="Re-enter password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required={!isEditing && !!password} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500"/>
-                            </div>
-                        </>
-                    )}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">Password</label>
+                        <input type="password" placeholder={isEditing ? "Leave blank to keep current" : "Enter password"} autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} required={!isEditing} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500"/>
+                    </div>
+                     <div>
+                        <label className="block text-sm font-medium text-gray-700">Confirm Password</label>
+                        <input type="password" placeholder="Re-enter password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required={!isEditing && !!password} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500"/>
+                    </div>
                     {error && <p className="text-sm text-red-600">{error}</p>}
                     <div className="flex justify-end space-x-2 pt-4">
                         <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Cancel</button>
-                        <button type="submit" disabled={isSaving} className="px-4 py-2 bg-green-700 text-white rounded-md hover:bg-green-800 disabled:bg-green-400">
-                            {isSaving ? 'Saving...' : 'Save User'}
-                        </button>
+                        <button type="submit" className="px-4 py-2 bg-green-700 text-white rounded-md hover:bg-green-800">Save User</button>
                     </div>
                 </form>
             </div>
@@ -112,12 +96,12 @@ const UserManagement: React.FC = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<User | null>(null);
 
-    const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
 
         const reader = new FileReader();
-        reader.onload = async (e) => {
+        reader.onload = (e) => {
             try {
                 const data = new Uint8Array(e.target?.result as ArrayBuffer);
                 const workbook = XLSX.read(data, { type: 'array' });
@@ -142,20 +126,19 @@ const UserManagement: React.FC = () => {
                     return;
                 }
 
-                for (const row of json) {
-                    const index = json.indexOf(row);
-                    const name = (row as any)[nameKey];
-                    const email = (row as any)[emailKey];
-                    const roleStr = (row as any)[roleKey];
+                json.forEach((row: any, index: number) => {
+                    const name = row[nameKey];
+                    const email = row[emailKey];
+                    const roleStr = row[roleKey];
 
                     if (!name || !email) {
                         errors.push(`Row ${index + 2}: Skipped because Name or Email is empty.`);
-                        continue;
+                        return;
                     }
 
                     if (users.some(u => u.email.toLowerCase() === String(email).toLowerCase())) {
                         errors.push(`Row ${index + 2}: Skipped because email "${email}" already exists.`);
-                        continue;
+                        return;
                     }
                     
                     let role: UserRole = UserRole.PANEL; // Default role
@@ -165,20 +148,15 @@ const UserManagement: React.FC = () => {
                         errors.push(`Row ${index + 2}: Invalid role "${roleStr}" for user "${name}". Defaulted to 'Panel'.`);
                     }
 
-                    const newUser = {
+                    const newUser: Omit<User, 'id'> = {
                         name: String(name),
                         email: String(email),
                         role: role,
-                        password: '123' // Default password
+                        passwordHash: '123'
                     };
-                    try {
-                        await addUser(newUser);
-                        addedCount++;
-                    } catch (err) {
-                        errors.push(`Row ${index + 2}: Failed to add user "${email}". Server error.`);
-                    }
-                }
-
+                    addUser(newUser);
+                    addedCount++;
+                });
 
                 let alertMessage = `${addedCount} user(s) added successfully.`;
                 if (errors.length > 0) {
@@ -206,26 +184,21 @@ const UserManagement: React.FC = () => {
         setIsModalOpen(true);
     };
 
-    const handleDelete = async (userId: string) => {
-        if (userId === currentUser?.$id) {
+    const handleDelete = (userId: string) => {
+        if (userId === currentUser?.id) {
             alert("You cannot delete your own account.");
             return;
         }
         if (window.confirm('Are you sure you want to delete this user?')) {
-            try {
-                await deleteUser(userId);
-            } catch (error) {
-                alert("Failed to delete user.");
-            }
+            deleteUser(userId);
         }
     };
     
-    // FIX: Changed passwordHash to password.
-    const handleSave = async (data: (Omit<User, '$id' | 'userId'> & { password: string }) | User) => {
-        if ('$id' in data) {
-            await updateUser(data);
+    const handleSave = (data: Omit<User, 'id'> | User) => {
+        if ('id' in data) {
+            updateUser(data);
         } else {
-            await addUser(data);
+            addUser(data);
         }
     };
 
@@ -279,13 +252,13 @@ const UserManagement: React.FC = () => {
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                         {users.map(user => (
-                            <tr key={user.$id}>
+                            <tr key={user.id}>
                                 <td className="px-6 py-4 whitespace-nowrap text-base font-medium text-black">{user.name}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-base text-black">{user.email}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-base text-black">{user.role}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
                                     <button onClick={() => handleEdit(user)} className="text-green-700 hover:text-green-900 p-1" aria-label={`Edit ${user.name}`}><EditIcon className="w-5 h-5"/></button>
-                                    <button onClick={() => handleDelete(user.$id)} className="text-red-600 hover:text-red-900 p-1 disabled:opacity-50" disabled={user.$id === currentUser?.$id} aria-label={`Delete ${user.name}`}><TrashIcon className="w-5 h-5"/></button>
+                                    <button onClick={() => handleDelete(user.id)} className="text-red-600 hover:text-red-900 p-1 disabled:opacity-50" disabled={user.id === currentUser?.id} aria-label={`Delete ${user.name}`}><TrashIcon className="w-5 h-5"/></button>
                                 </td>
                             </tr>
                         ))}

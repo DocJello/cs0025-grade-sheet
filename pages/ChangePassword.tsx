@@ -9,9 +9,8 @@ const ChangePassword: React.FC = () => {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
-    const [isUpdating, setIsUpdating] = useState(false);
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
         setSuccess('');
@@ -20,14 +19,12 @@ const ChangePassword: React.FC = () => {
             setError('New passwords do not match.');
             return;
         }
-        if (newPassword.length < 8) {
-            setError('New password must be at least 8 characters long.');
+        if (newPassword.length < 6) {
+            setError('New password must be at least 6 characters long.');
             return;
         }
-        
-        setIsUpdating(true);
-        const isSuccess = await changePassword(oldPassword, newPassword);
-        setIsUpdating(false);
+
+        const isSuccess = changePassword(oldPassword, newPassword);
 
         if (isSuccess) {
             setSuccess('Password changed successfully!');
@@ -93,10 +90,9 @@ const ChangePassword: React.FC = () => {
                     <div className="text-right">
                          <button
                             type="submit"
-                            disabled={isUpdating}
-                            className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-700 hover:bg-green-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-green-400"
+                            className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-700 hover:bg-green-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
                         >
-                            {isUpdating ? 'Updating...' : 'Update Password'}
+                            Update Password
                         </button>
                     </div>
                 </form>

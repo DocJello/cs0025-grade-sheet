@@ -8,19 +8,13 @@ const Login: React.FC = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
-        setIsLoading(true);
-        try {
-            await login(email, password);
-        } catch (err) {
+        if (!login(email, password)) {
             setError('Invalid email or password.');
-            setIsLoading(false);
         }
-        // No need to set loading to false on success, as the component will unmount
     };
 
     return (
@@ -73,10 +67,9 @@ const Login: React.FC = () => {
                     <div>
                         <button
                             type="submit"
-                            disabled={isLoading}
-                            className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-green-700 hover:bg-green-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-green-400"
+                            className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-green-700 hover:bg-green-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
                         >
-                            {isLoading ? 'Signing in...' : 'Sign in'}
+                            Sign in
                         </button>
                     </div>
                 </form>
