@@ -25,13 +25,11 @@ const calculatePanelScores = (grades: PanelGrades | undefined, proponents: Stude
     return { titleDefenseWeighted, individualWeighted };
 };
 
-const ErrorModal: React.FC<{ message: string }> = ({ message }) => {
-    const [progressWidth, setProgressWidth] = useState('0%');
-
+const ErrorModal: React.FC<{ message: string, onClose: () => void }> = ({ message, onClose }) => {
     useEffect(() => {
-        const timer = setTimeout(() => setProgressWidth('100%'), 100);
+        const timer = setTimeout(onClose, 3000);
         return () => clearTimeout(timer);
-    }, []);
+    }, [onClose]);
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
@@ -43,12 +41,7 @@ const ErrorModal: React.FC<{ message: string }> = ({ message }) => {
                 </div>
                 <h3 className="text-xl font-bold text-gray-800">Assignment Error</h3>
                 <p className="text-gray-600 mt-2 mb-6">{message}</p>
-                <div className="w-full bg-gray-200 rounded-full h-2.5">
-                    <div
-                        className="bg-red-500 h-2.5 rounded-full transition-all duration-[3000ms] ease-linear"
-                        style={{ width: progressWidth }}
-                    ></div>
-                </div>
+                 <button onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Close</button>
             </div>
         </div>
     );
@@ -58,20 +51,10 @@ const Masterlist: React.FC = () => {
     const { gradeSheets, users, updateGradeSheet, findUserById } = useAppContext();
     const [errorModal, setErrorModal] = useState({ show: false, message: '' });
 
-    useEffect(() => {
-        if (errorModal.show) {
-            const timer = setTimeout(() => {
-                setErrorModal({ show: false, message: '' });
-            }, 3000);
-            return () => clearTimeout(timer);
-        }
-    }, [errorModal.show]);
-
     const handlePanelChange = (sheetId: string, panelKey: 'panel1Id' | 'panel2Id', userId: string) => {
-        const sheet = gradeSheets.find(s => s.id === sheetId);
+        const sheet = gradeSheets.find(s => s.$id === sheetId);
         if (!sheet) return;
 
-        // Check for duplicate assignment
         if ((panelKey === 'panel1Id' && userId === sheet.panel2Id) ||
             (panelKey === 'panel2Id' && userId === sheet.panel1Id)) {
             
@@ -81,7 +64,10 @@ const Masterlist: React.FC = () => {
         }
 
         const updatedSheet = { ...sheet, [panelKey]: userId };
-        updateGradeSheet(updatedSheet);
+        updateGradeSheet(updatedSheet).catch(err => {
+            console.error(err);
+            setErrorModal({show: true, message: "Failed to update panel assignment."})
+        });
     };
 
     const panelOptions = useMemo(() => 
@@ -325,7 +311,7 @@ const Masterlist: React.FC = () => {
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                         {masterlistData.map(group => (
-                            <React.Fragment key={group.id}>
+                            <React.Fragment key={group.$id}>
                                 {group.studentScores.map((student, index) => (
                                     <tr key={student.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                                         {index === 0 && (
@@ -338,13 +324,13 @@ const Masterlist: React.FC = () => {
                                                 <td rowSpan={group.proponents.length} className="px-4 py-4 align-middle border-r">
                                                     <select
                                                         value={group.panel1Id}
-                                                        onChange={(e) => handlePanelChange(group.id, 'panel1Id', e.target.value)}
+                                                        onChange={(e) => handlePanelChange(group.$id, 'panel1Id', e.target.value)}
                                                         className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 no-print"
                                                         aria-label={`Assign Panel 1 for ${group.groupName}`}
                                                     >
                                                         <option value="" disabled>-- Select --</option>
                                                         {panelOptions.map(opt => (
-                                                            <option key={opt.id} value={opt.id}>{opt.name}</option>
+                                                            <option key={opt.$id} value={opt.$id}>{opt.name}</option>
                                                         ))}
                                                     </select>
                                                     <span className="print-only">{findUserById(group.panel1Id)?.name || 'N/A'}</span>
@@ -352,13 +338,13 @@ const Masterlist: React.FC = () => {
                                                 <td rowSpan={group.proponents.length} className="px-4 py-4 align-middle border-r">
                                                     <select
                                                         value={group.panel2Id}
-                                                        onChange={(e) => handlePanelChange(group.id, 'panel2Id', e.target.value)}
+                                                        onChange={(e) => handlePanelChange(group.$id, 'panel2Id', e.target.value)}
                                                         className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 no-print"
                                                         aria-label={`Assign Panel 2 for ${group.groupName}`}
                                                     >
                                                         <option value="" disabled>-- Select --</option>
                                                         {panelOptions.map(opt => (
-                                                            <option key={opt.id} value={opt.id}>{opt.name}</option>
+                                                            <option key={opt.$id} value={opt.$id}>{opt.name}</option>
                                                         ))}
                                                     </select>
                                                      <span className="print-only">{findUserById(group.panel2Id)?.name || 'N/A'}</span>
@@ -401,7 +387,7 @@ const Masterlist: React.FC = () => {
                     </tbody>
                 </table>
             </div>
-            {errorModal.show && <ErrorModal message={errorModal.message} />}
+            {errorModal.show && <ErrorModal message={errorModal.message} onClose={() => setErrorModal({ show: false, message: '' })}/>}
         </div>
     );
 };
