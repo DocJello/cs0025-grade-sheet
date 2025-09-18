@@ -1,4 +1,3 @@
-// FIX: Full content for types.ts
 export enum UserRole {
     ADMIN = 'Admin',
     COURSE_ADVISER = 'Course Adviser',
@@ -6,11 +5,11 @@ export enum UserRole {
 }
 
 export interface User {
-    id: string;
+    $id: string; // Appwrite document ID from 'profiles' collection
+    userId: string; // Appwrite auth user ID
     name: string;
     email: string;
     role: UserRole;
-    passwordHash: string;
 }
 
 export interface Student {
@@ -46,7 +45,7 @@ export enum GradeSheetStatus {
 }
 
 export interface GradeSheet {
-    id: string;
+    $id: string; // Appwrite document ID
     groupName: string;
     proponents: Student[];
     proposedTitles: string[];

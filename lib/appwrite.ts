@@ -1,14 +1,13 @@
 import { Client, Account, Databases, ID, Query } from 'appwrite';
 
-const APPWRITE_ENDPOINT = (process.env as any).VITE_APPWRITE_ENDPOINT;
-const APPWRITE_PROJECT_ID = (process.env as any).VITE_APPWRITE_PROJECT_ID;
+const APPWRITE_ENDPOINT = process.env.APPWRITE_ENDPOINT;
+const APPWRITE_PROJECT_ID = process.env.APPWRITE_PROJECT_ID;
 
 // This check is crucial for debugging. If the environment variables aren't set,
-// it's better to fail early with a clear error message than to let the app
-// crash with a generic "Failed to fetch" network error.
+// it's better to fail early with a clear error message.
 if (!APPWRITE_ENDPOINT || !APPWRITE_PROJECT_ID) {
     throw new Error(
-        'Appwrite configuration error: The VITE_APPWRITE_ENDPOINT and/or VITE_APPWRITE_PROJECT_ID environment variables are not set. Please ensure they are correctly configured in your hosting environment (e.g., Netlify).'
+        'Appwrite configuration error: The APPWRITE_ENDPOINT and/or APPWRITE_PROJECT_ID environment variables are not set. Please ensure they are correctly configured in your hosting environment (e.g., Netlify) and that you have redeployed the site.'
     );
 }
 

@@ -94,9 +94,29 @@ const Sidebar: React.FC<{
 
 
 const AppContent: React.FC = () => {
-    const { currentUser } = useAppContext();
+    const { currentUser, isLoading } = useAppContext();
     const [page, setPage] = useState<Page>('dashboard');
     const [selectedGradeSheetId, setSelectedGradeSheetId] = useState<string>('');
+    
+    // This effect ensures that if a grade sheet is deleted, we don't stay on an invalid page.
+    // It can be expanded for more complex navigation logic.
+    React.useEffect(() => {
+        if (page === 'grading-sheet' && !selectedGradeSheetId) {
+            setPage('dashboard');
+        }
+    }, [page, selectedGradeSheetId]);
+
+
+    if (isLoading) {
+        return (
+            <div className="flex h-screen w-screen items-center justify-center bg-gray-50">
+                <div className="text-center">
+                    <div className="text-2xl font-semibold text-gray-700">Loading Application...</div>
+                    <p className="text-gray-500 mt-2">Please wait a moment.</p>
+                </div>
+            </div>
+        );
+    }
 
     if (!currentUser) {
         return <Login />;
