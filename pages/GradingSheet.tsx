@@ -165,7 +165,7 @@ const GradingSheet: React.FC<GradingSheetProps> = ({ gradeSheetId, setPage }) =>
     };
 
     const handleGenerateComment = async () => {
-        const apiKey = process.env.API_KEY;
+        const apiKey = import.meta.env.VITE_API_KEY;
         if (!sheet || !grades || !apiKey) {
             alert("Cannot generate comment. Missing sheet data or API key configuration.");
             return;
