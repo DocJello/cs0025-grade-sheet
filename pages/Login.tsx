@@ -1,26 +1,26 @@
-
 import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { APP_NAME } from '../constants';
 
 const Login: React.FC = () => {
-    const { login } = useAppContext();
+    const { login, setGlobalError } = useAppContext();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setError('');
+        setGlobalError(null); // Clear previous errors before trying again
         setIsLoading(true);
         try {
             await login(email, password);
+            // On success, the main app state will change and this component will unmount.
+            // No need to setIsLoading(false) on success.
         } catch (err) {
-            setError('Invalid email or password.');
+            // The context has already set the global error message.
+            // We just need to stop this component's loading spinner.
             setIsLoading(false);
         }
-        // No need to set loading to false on success, as the component will unmount
     };
 
     return (
@@ -66,9 +66,7 @@ const Login: React.FC = () => {
                         </div>
                     </div>
 
-                    {error && (
-                        <div className="text-red-500 text-sm text-center">{error}</div>
-                    )}
+                    {/* The error message is now handled by a global modal in App.tsx */}
 
                     <div>
                         <button

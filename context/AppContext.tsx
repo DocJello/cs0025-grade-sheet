@@ -1,4 +1,3 @@
-
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
 import { User, UserRole, GradeSheet, GradeSheetStatus, PanelGrades } from '../types';
 // FIX: The `users` service is no longer available on the client. It is imported as `null` from `lib/appwrite`.
@@ -11,6 +10,8 @@ interface AppContextType {
     gradeSheets: GradeSheet[];
     venues: string[];
     isLoading: boolean;
+    globalError: string | null;
+    setGlobalError: (message: string | null) => void;
     login: (email: string, pass: string) => Promise<void>;
     logout: () => Promise<void>;
     findUserById: (id: string) => User | undefined;
@@ -45,6 +46,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const [gradeSheets, setGradeSheets] = useState<GradeSheet[]>([]);
     const [venues, setVenues] = useState<string[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [globalError, setGlobalError] = useState<string | null>(null);
 
     const fetchAllData = async (authUserId: string) => {
         try {
@@ -55,20 +57,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 databases.listDocuments(DATABASE_ID, VENUES_COLLECTION_ID, [Query.limit(100)])
             ]);
             
-            if (profileResponse.documents.length > 0) {
-                 setCurrentUser(profileResponse.documents[0] as unknown as User);
-            } else {
-                 throw new Error("User profile not found.");
+            if (profileResponse.documents.length === 0) {
+                 throw new Error("Login successful, but your user profile was not found. Please contact an admin to ensure your account is correctly linked in the 'profiles' database table using the correct User ID.");
             }
             
+            setCurrentUser(profileResponse.documents[0] as unknown as User);
             setUsers(usersResponse.documents as unknown as User[]);
             setGradeSheets(sheetsResponse.documents.map(parseGradeSheetDoc));
             setVenues(venuesResponse.documents.map(v => v.name));
 
-        } catch (error) {
+        } catch (error: any) {
             console.error("Failed to fetch data:", error);
-            // If fetching fails, logout to ensure a clean state
-            await logout();
+            if (error.message.includes("user profile was not found")) {
+                throw error; 
+            }
+            throw new Error(
+                "Could not load application data after login. This is likely a permission issue. Please ask your administrator to verify that the 'All users' role has 'Read' access on the 'profiles', 'gradeSheets', and 'venues' database collections."
+            );
         }
     };
     
@@ -88,15 +93,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }, []);
 
     const login = async (email: string, pass: string) => {
-        setIsLoading(true);
         try {
             const session = await account.createEmailPasswordSession(email, pass);
+            setIsLoading(true);
             await fetchAllData(session.userId);
-        } catch (error) {
+        } catch (error: any) {
+            setIsLoading(false); // Stop loading on any failure.
             console.error("Login failed:", error);
-            throw error; // Rethrow to be caught by the login page
-        } finally {
-            setIsLoading(false);
+            let errorMessage = error.message || 'An unexpected error occurred.';
+            if (error.code === 401) {
+                errorMessage = "Invalid email or password.";
+            }
+            setGlobalError(errorMessage);
+            throw error; // Re-throw so the Login component knows it failed.
         }
     };
 
@@ -252,6 +261,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         gradeSheets,
         venues,
         isLoading,
+        globalError,
+        setGlobalError,
         login,
         logout,
         findUserById,
