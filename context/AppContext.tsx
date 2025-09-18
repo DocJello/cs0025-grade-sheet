@@ -1,8 +1,12 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
 import { User, UserRole, GradeSheet, GradeSheetStatus, PanelGrades } from '../types';
-// FIX: The `users` service is no longer available on the client. It is imported as `null` from `lib/appwrite`.
-import { account, databases, users as appwriteUsers, DATABASE_ID, PROFILES_COLLECTION_ID, GRADESHEETS_COLLECTION_ID, VENUES_COLLECTION_ID, ID, Query } from '../lib/appwrite';
-import { Models } from 'appwrite';
+import { initAppwrite, DATABASE_ID, PROFILES_COLLECTION_ID, GRADESHEETS_COLLECTION_ID, VENUES_COLLECTION_ID, ID, Query } from '../lib/appwrite';
+import { Models, Account, Databases } from 'appwrite';
+
+interface AppwriteClients {
+    account: Account;
+    databases: Databases;
+}
 
 interface AppContextType {
     currentUser: User | null;
@@ -19,7 +23,6 @@ interface AppContextType {
     updateGradeSheet: (sheet: GradeSheet) => Promise<void>;
     addGradeSheet: (sheetData: Omit<GradeSheet, '$id' | 'status'>) => Promise<void>;
     deleteGradeSheet: (sheetId: string) => Promise<void>;
-    // FIX: Changed passwordHash to password to match client SDK expectations.
     addUser: (userData: Omit<User, '$id' | 'userId'> & { password: string }) => Promise<void>;
     updateUser: (user: User) => Promise<void>;
     deleteUser: (userId: string) => Promise<void>;
@@ -29,8 +32,6 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// Helper to parse grade sheet documents from Appwrite
-// FIX: Cast `doc` to `any` to access custom collection attributes.
 const parseGradeSheetDoc = (doc: Models.Document): GradeSheet => ({
     ...doc,
     $id: doc.$id,
@@ -41,6 +42,7 @@ const parseGradeSheetDoc = (doc: Models.Document): GradeSheet => ({
 
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+    const [appwriteClients, setAppwriteClients] = useState<AppwriteClients | null>(null);
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [users, setUsers] = useState<User[]>([]);
     const [gradeSheets, setGradeSheets] = useState<GradeSheet[]>([]);
@@ -48,13 +50,24 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const [isLoading, setIsLoading] = useState(true);
     const [globalError, setGlobalError] = useState<string | null>(null);
 
+    useEffect(() => {
+        try {
+            const clients = initAppwrite();
+            setAppwriteClients(clients);
+        } catch (error: any) {
+            setGlobalError(error.message);
+            setIsLoading(false);
+        }
+    }, []);
+
     const fetchAllData = async (authUserId: string) => {
+        if (!appwriteClients) return;
         try {
             const [profileResponse, usersResponse, sheetsResponse, venuesResponse] = await Promise.all([
-                databases.listDocuments(DATABASE_ID, PROFILES_COLLECTION_ID, [Query.equal('userId', authUserId)]),
-                databases.listDocuments(DATABASE_ID, PROFILES_COLLECTION_ID, [Query.limit(100)]),
-                databases.listDocuments(DATABASE_ID, GRADESHEETS_COLLECTION_ID, [Query.limit(100)]),
-                databases.listDocuments(DATABASE_ID, VENUES_COLLECTION_ID, [Query.limit(100)])
+                appwriteClients.databases.listDocuments(DATABASE_ID, PROFILES_COLLECTION_ID, [Query.equal('userId', authUserId)]),
+                appwriteClients.databases.listDocuments(DATABASE_ID, PROFILES_COLLECTION_ID, [Query.limit(100)]),
+                appwriteClients.databases.listDocuments(DATABASE_ID, GRADESHEETS_COLLECTION_ID, [Query.limit(100)]),
+                appwriteClients.databases.listDocuments(DATABASE_ID, VENUES_COLLECTION_ID, [Query.limit(100)])
             ]);
             
             if (profileResponse.documents.length === 0) {
@@ -78,40 +91,46 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
     
     useEffect(() => {
+        if (!appwriteClients) {
+            if (!globalError) setIsLoading(false); // If no clients and no error, stop loading
+            return;
+        }
+
         const checkSession = async () => {
             try {
-                const session = await account.get();
+                const session = await appwriteClients.account.get();
                 await fetchAllData(session.$id);
             } catch (error) {
-                // Not logged in
                 setCurrentUser(null);
             } finally {
                 setIsLoading(false);
             }
         };
         checkSession();
-    }, []);
+    }, [appwriteClients, globalError]);
 
     const login = async (email: string, pass: string) => {
+        if (!appwriteClients) throw new Error("Appwrite is not configured.");
         try {
-            const session = await account.createEmailPasswordSession(email, pass);
+            const session = await appwriteClients.account.createEmailPasswordSession(email, pass);
             setIsLoading(true);
             await fetchAllData(session.userId);
         } catch (error: any) {
-            setIsLoading(false); // Stop loading on any failure.
+            setIsLoading(false);
             console.error("Login failed:", error);
             let errorMessage = error.message || 'An unexpected error occurred.';
             if (error.code === 401) {
                 errorMessage = "Invalid email or password.";
             }
             setGlobalError(errorMessage);
-            throw error; // Re-throw so the Login component knows it failed.
+            throw error;
         }
     };
 
     const logout = async () => {
+        if (!appwriteClients) return;
         try {
-            await account.deleteSession('current');
+            await appwriteClients.account.deleteSession('current');
         } catch (error) {
             console.error("Logout failed:", error);
         }
@@ -141,106 +160,54 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
     
     const updateGradeSheet = async (sheet: GradeSheet) => {
+        if (!appwriteClients) return;
         const updatedSheetWithStatus = { ...sheet, status: updateGradeSheetStatus(sheet) };
         const { $id, ...dataToUpdate } = updatedSheetWithStatus;
-
-        // Prepare data for Appwrite by stringifying complex objects
         const payload = {
             ...dataToUpdate,
             proponents: JSON.stringify(dataToUpdate.proponents),
             panel1Grades: dataToUpdate.panel1Grades ? JSON.stringify(dataToUpdate.panel1Grades) : null,
             panel2Grades: dataToUpdate.panel2Grades ? JSON.stringify(dataToUpdate.panel2Grades) : null,
         };
-
-        await databases.updateDocument(DATABASE_ID, GRADESHEETS_COLLECTION_ID, $id, payload);
+        await appwriteClients.databases.updateDocument(DATABASE_ID, GRADESHEETS_COLLECTION_ID, $id, payload);
         setGradeSheets(prev => prev.map(s => s.$id === $id ? updatedSheetWithStatus : s));
     };
 
     const addGradeSheet = async (sheetData: Omit<GradeSheet, '$id' | 'status'>) => {
-        const newSheet: GradeSheet = {
-            ...sheetData,
-            $id: '', // will be replaced by appwrite response
-            status: GradeSheetStatus.NOT_STARTED,
-        };
-
-        const payload = {
-            ...newSheet,
-            proponents: JSON.stringify(newSheet.proponents),
-        };
-        delete (payload as any).$id; // Remove placeholder id
-
-        const newDoc = await databases.createDocument(DATABASE_ID, GRADESHEETS_COLLECTION_ID, ID.unique(), payload);
+        if (!appwriteClients) return;
+        const newSheet: GradeSheet = { ...sheetData, $id: '', status: GradeSheetStatus.NOT_STARTED };
+        const payload = { ...newSheet, proponents: JSON.stringify(newSheet.proponents) };
+        delete (payload as any).$id;
+        const newDoc = await appwriteClients.databases.createDocument(DATABASE_ID, GRADESHEETS_COLLECTION_ID, ID.unique(), payload);
         setGradeSheets(prev => [...prev, parseGradeSheetDoc(newDoc)]);
     };
     
     const deleteGradeSheet = async (sheetId: string) => {
-        await databases.deleteDocument(DATABASE_ID, GRADESHEETS_COLLECTION_ID, sheetId);
+        if (!appwriteClients) return;
+        await appwriteClients.databases.deleteDocument(DATABASE_ID, GRADESHEETS_COLLECTION_ID, sheetId);
         setGradeSheets(prev => prev.filter(s => s.$id !== sheetId));
     };
 
-    // FIX: Changed passwordHash to password to match client SDK expectations.
     const addUser = async (userData: Omit<User, '$id' | 'userId'> & { password: string }) => {
-        // FIX: The `Users` service is not available in the client SDK. This functionality requires a backend implementation (e.g., Appwrite Functions).
-        if (!appwriteUsers) {
-            throw new Error("Admin user creation is not supported on the client-side. This requires a backend implementation.");
-        }
-        // This is an admin action and requires appropriate permissions in Appwrite
-        // FIX: Use `appwriteUsers` instead of `users` to call the Appwrite service.
-        // FIX: Pass undefined for optional phone param and use plaintext password.
-        const authUser = await appwriteUsers.create(ID.unique(), userData.email, undefined, userData.password, userData.name);
-        
-        const profileData = {
-            userId: authUser.$id,
-            name: userData.name,
-            email: userData.email,
-            role: userData.role,
-        };
-        
-        const newProfileDoc = await databases.createDocument(DATABASE_ID, PROFILES_COLLECTION_ID, ID.unique(), profileData);
-        setUsers(prev => [...prev, newProfileDoc as unknown as User]);
+        throw new Error("Admin user creation is not supported on the client-side. This requires a backend implementation like Appwrite Functions for security reasons.");
     };
 
     const updateUser = async (user: User) => {
-        // FIX: The `Users` service is not available in the client SDK. This functionality requires a backend implementation (e.g., Appwrite Functions).
-        if (!appwriteUsers) {
-            throw new Error("Admin user updates are not supported on the client-side. This requires a backend implementation.");
-        }
+        if (!appwriteClients) return;
         const { $id, userId, ...profileData } = user;
-        // userId should not be updated.
-        await databases.updateDocument(DATABASE_ID, PROFILES_COLLECTION_ID, $id, profileData);
-        
-        // Also update name in Auth if it changed
-        // FIX: Use `appwriteUsers` instead of `users` to call the Appwrite service.
-        const currentAuthUser = await appwriteUsers.get(userId);
-        if (currentAuthUser.name !== user.name) {
-            // FIX: Use `appwriteUsers` instead of `users` to call the Appwrite service.
-            await appwriteUsers.updateName(userId, user.name);
-        }
-
+        await appwriteClients.databases.updateDocument(DATABASE_ID, PROFILES_COLLECTION_ID, $id, profileData);
         setUsers(prev => prev.map(u => u.$id === $id ? user : u));
-        if (currentUser?.$id === $id) {
-            setCurrentUser(user);
-        }
+        if (currentUser?.$id === $id) setCurrentUser(user);
     };
     
     const deleteUser = async (userId: string) => {
-        // FIX: The `Users` service is not available in the client SDK. This functionality requires a backend implementation (e.g., Appwrite Functions).
-        if (!appwriteUsers) {
-            throw new Error("Admin user deletion is not supported on the client-side. This requires a backend implementation.");
-        }
-        const userToDelete = users.find(u => u.$id === userId);
-        if (!userToDelete) return;
-
-        // Delete profile document first, then auth user
-        await databases.deleteDocument(DATABASE_ID, PROFILES_COLLECTION_ID, userId);
-        // FIX: Use `appwriteUsers` instead of `users` to call the Appwrite service.
-        await appwriteUsers.delete(userToDelete.userId);
-        setUsers(prev => prev.filter(u => u.$id !== userId));
+        throw new Error("Admin user deletion is not supported on the client-side. This requires a backend implementation like Appwrite Functions for security reasons.");
     };
 
     const changePassword = async (oldPass: string, newPass: string): Promise<boolean> => {
+        if (!appwriteClients) return false;
         try {
-            await account.updatePassword(newPass, oldPass);
+            await appwriteClients.account.updatePassword(newPass, oldPass);
             return true;
         } catch (error) {
             console.error("Failed to change password", error);
@@ -249,8 +216,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const addVenue = async (venue: string) => {
+        if (!appwriteClients) return;
         if (venue && !venues.includes(venue)) {
-            await databases.createDocument(DATABASE_ID, VENUES_COLLECTION_ID, ID.unique(), { name: venue });
+            await appwriteClients.databases.createDocument(DATABASE_ID, VENUES_COLLECTION_ID, ID.unique(), { name: venue });
             setVenues(prev => [...prev, venue]);
         }
     };
