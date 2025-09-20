@@ -3,23 +3,23 @@ import { useAppContext } from '../context/AppContext';
 import { APP_NAME } from '../constants';
 
 const Login: React.FC = () => {
-    const { login, setGlobalError } = useAppContext();
+    const { login } = useAppContext();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setGlobalError(null); // Clear previous errors before trying again
-        setIsLoading(true);
+        setError('');
+        setLoading(true);
         try {
             await login(email, password);
-            // On success, the main app state will change and this component will unmount.
-            // No need to setIsLoading(false) on success.
         } catch (err) {
-            // The context has already set the global error message.
-            // We just need to stop this component's loading spinner.
-            setIsLoading(false);
+            setError('Invalid email or password.');
+            console.error(err);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -66,15 +66,17 @@ const Login: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* The error message is now handled by a global modal in App.tsx */}
+                    {error && (
+                        <div className="text-red-500 text-sm text-center">{error}</div>
+                    )}
 
                     <div>
                         <button
                             type="submit"
-                            disabled={isLoading}
+                            disabled={loading}
                             className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-green-700 hover:bg-green-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-green-400"
                         >
-                            {isLoading ? 'Signing in...' : 'Sign in'}
+                            {loading ? 'Signing in...' : 'Sign in'}
                         </button>
                     </div>
                 </form>

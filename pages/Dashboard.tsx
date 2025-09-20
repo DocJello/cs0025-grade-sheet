@@ -63,7 +63,7 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateToGradeSheet }) => {
 
     const isAdminOrAdviser = currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.COURSE_ADVISER;
     
-    // FIX: Use `.$id` instead of `.id` to match the User type.
+    // FIX: Use `currentUser.$id` as User objects have an `$id` property.
     const allSheets = isAdminOrAdviser ? gradeSheets : getPanelSheets(currentUser.$id);
 
     const displaySheets = allSheets.filter(sheet => {
@@ -209,7 +209,7 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateToGradeSheet }) => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 no-print">
                 {displaySheets.length > 0 ? (
                     displaySheets.map(sheet => (
-                        // FIX: Use `.$id` instead of `.id` for the key and event handler.
+                        // FIX: Use `sheet.$id` as GradeSheet objects have an `$id` property.
                         <GradeSheetCard key={sheet.$id} sheet={sheet} onView={() => handleViewSheet(sheet.$id)} />
                     ))
                 ) : (
@@ -232,7 +232,7 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateToGradeSheet }) => {
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                         {displaySheets.map(sheet => (
-                            // FIX: Use `.$id` instead of `.id` for the key.
+                            // FIX: Use `sheet.$id` as GradeSheet objects have an `$id` property.
                             <tr key={sheet.$id}>
                                 <td className="px-4 py-2">{sheet.groupName}</td>
                                 <td className="px-4 py-2">{findUserById(sheet.panel1Id)?.name || 'N/A'}</td>

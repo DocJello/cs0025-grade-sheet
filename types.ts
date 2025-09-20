@@ -1,18 +1,4 @@
-// Add this to make TypeScript aware of Vite's env variables
-// This is more robust than a /// triple-slash directive.
-interface ImportMetaEnv {
-  readonly VITE_APPWRITE_ENDPOINT: string;
-  readonly VITE_APPWRITE_PROJECT_ID: string;
-  readonly VITE_API_KEY: string;
-}
-
-// FIX: Augment the global ImportMeta interface to make TypeScript aware of Vite's env variables from within a module.
-declare global {
-  interface ImportMeta {
-    readonly env: ImportMetaEnv;
-  }
-}
-
+// FIX: Full content for types.ts
 export enum UserRole {
     ADMIN = 'Admin',
     COURSE_ADVISER = 'Course Adviser',
@@ -20,7 +6,7 @@ export enum UserRole {
 }
 
 export interface User {
-    $id: string; // Appwrite document ID from 'profiles' collection
+    $id: string; // Appwrite document ID
     userId: string; // Appwrite auth user ID
     name: string;
     email: string;

@@ -2,8 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { Page, GradeSheet, PanelGrades, RubricItem, Student } from '../types';
 import { TITLE_DEFENSE_RUBRIC, INDIVIDUAL_GRADE_RUBRIC } from '../constants';
-import { InfoIcon, SparklesIcon } from '../components/Icons';
-import { GoogleGenAI } from '@google/genai';
+import { InfoIcon } from '../components/Icons';
 
 interface GradingSheetProps {
     gradeSheetId: string;
@@ -54,20 +53,19 @@ const SuccessModal: React.FC = () => {
 const GradingSheet: React.FC<GradingSheetProps> = ({ gradeSheetId, setPage }) => {
     const { gradeSheets, updateGradeSheet, currentUser, venues, addVenue } = useAppContext();
     
+    // FIX: Use `s.$id` as GradeSheet objects have an `$id` property.
     const sheet = useMemo(() => gradeSheets.find(s => s.$id === gradeSheetId), [gradeSheetId, gradeSheets]);
     
     const { panelKey, isPanel1, isPanelist } = useMemo(() => {
         if (!currentUser || !sheet) return { panelKey: null, isPanel1: false, isPanelist: false };
         let key: 'panel1Grades' | 'panel2Grades' | null = null;
         let p1 = false;
-        
-        const panel1Profile = sheet.panel1Id;
-        const panel2Profile = sheet.panel2Id;
-
-        if (panel1Profile === currentUser.$id) {
+        // FIX: Use `currentUser.$id` as User objects have an `$id` property.
+        if (sheet.panel1Id === currentUser.$id) {
             key = 'panel1Grades';
             p1 = true;
-        } else if (panel2Profile === currentUser.$id) {
+        // FIX: Use `currentUser.$id` as User objects have an `$id` property.
+        } else if (sheet.panel2Id === currentUser.$id) {
             key = 'panel2Grades';
         }
         return { panelKey: key, isPanel1: p1, isPanelist: !!key };
@@ -80,7 +78,6 @@ const GradingSheet: React.FC<GradingSheetProps> = ({ gradeSheetId, setPage }) =>
     const [showVenueInput, setShowVenueInput] = useState(false);
     const [newVenue, setNewVenue] = useState('');
     const [showSuccess, setShowSuccess] = useState(false);
-    const [isGeneratingAiComment, setIsGeneratingAiComment] = useState(false);
 
     const areDetailsSet = sheet?.selectedTitle && sheet.selectedTitle !== 'Untitled Project' && sheet.program && sheet.date !== 'Not Set' && sheet.venue !== 'Not Set';
 
@@ -124,11 +121,11 @@ const GradingSheet: React.FC<GradingSheetProps> = ({ gradeSheetId, setPage }) =>
         }
     };
     
-    const handleSaveDetails = async () => {
+    const handleSaveDetails = () => {
         if (!sheet) return;
         let finalVenue = localDetails.venue;
         if (localDetails.venue === 'Others' && newVenue) {
-            await addVenue(newVenue);
+            addVenue(newVenue);
             finalVenue = newVenue;
         }
         
@@ -139,7 +136,7 @@ const GradingSheet: React.FC<GradingSheetProps> = ({ gradeSheetId, setPage }) =>
             date: localDetails.date || 'Not Set',
             venue: finalVenue || 'Not Set',
         };
-        await updateGradeSheet(updatedSheet);
+        updateGradeSheet(updatedSheet);
     };
 
     const handleScoreChange = (rubricId: string, value: string | number, max: number, studentId?: string) => {
@@ -164,65 +161,7 @@ const GradingSheet: React.FC<GradingSheetProps> = ({ gradeSheetId, setPage }) =>
         setRubricModal({ show: false, item: null });
     };
 
-    const handleGenerateComment = async () => {
-        const apiKey = import.meta.env.VITE_API_KEY;
-        if (!sheet || !grades || !apiKey) {
-            alert("Cannot generate comment. Missing sheet data or API key configuration.");
-            return;
-        }
-
-        setIsGeneratingAiComment(true);
-
-        let prompt = `You are a helpful and constructive panelist for a university-level title proposal defense. Your task is to provide feedback to the group based on their scores. The feedback should be a single, well-structured paragraph. Be encouraging but also provide clear, actionable advice on areas that need improvement, especially where scores are low.
-
-Group Name: ${sheet.groupName}
-Project Title: ${sheet.selectedTitle}
-
-Here are the scores you provided:
-
-**Title Defense Scores (out of 70%):**
-`;
-
-        TITLE_DEFENSE_RUBRIC.forEach(item => {
-            const score = grades.titleDefenseScores[item.id] || 0;
-            prompt += `- ${item.criteria} (Weight: ${item.weight}): Scored ${score}/${item.weight}\n`;
-        });
-
-        prompt += `\n**Individual Performance Scores (out of 30%):**\n`;
-
-        sheet.proponents.forEach(student => {
-            prompt += `For ${student.name}:\n`;
-            INDIVIDUAL_GRADE_RUBRIC.forEach(item => {
-                const score = grades.individualScores[student.id]?.[item.id] || 0;
-                prompt += `  - ${item.criteria} (Weight: ${item.weight}): Scored ${score}/${item.weight}\n`;
-            });
-        });
-
-        prompt += `\nBased on these scores, please generate a concise and constructive paragraph of feedback for the group.`;
-
-        try {
-            const ai = new GoogleGenAI({ apiKey });
-            const responseStream = await ai.models.generateContentStream({
-                model: 'gemini-2.5-flash',
-                contents: prompt,
-            });
-
-            setGrades(g => g ? { ...g, comments: '' } : null); // Clear previous comments
-
-            for await (const chunk of responseStream) {
-                setGrades(g => g ? { ...g, comments: g.comments + chunk.text } : null);
-            }
-
-        } catch (error) {
-            console.error("AI comment generation failed:", error);
-            alert("An error occurred while generating the comment. Please try again.");
-        } finally {
-            setIsGeneratingAiComment(false);
-        }
-    };
-
-
-    const handleSubmit = async () => {
+    const handleSubmit = () => {
         if (!sheet || !grades) return;
 
         const missing: string[] = [];
@@ -252,7 +191,7 @@ Here are the scores you provided:
         
         if (panelKey) {
             const updatedSheet = { ...sheet, [panelKey]: { ...grades, submitted: true } };
-            await updateGradeSheet(updatedSheet);
+            updateGradeSheet(updatedSheet);
             setShowSuccess(true);
         }
     };
@@ -371,19 +310,7 @@ Here are the scores you provided:
 
                 {/* Comments */}
                 <div className="bg-white shadow-lg rounded-lg p-8 mb-8">
-                    <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-2xl font-bold text-gray-800">Comments & Feedback</h3>
-                        {!isReadOnly && (
-                            <button
-                                onClick={handleGenerateComment}
-                                disabled={isGeneratingAiComment}
-                                className="flex items-center px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700 disabled:bg-purple-300 transition-colors"
-                            >
-                                <SparklesIcon className="w-5 h-5 mr-2" />
-                                {isGeneratingAiComment ? 'Generating...' : '✨ Generate with AI'}
-                            </button>
-                        )}
-                    </div>
+                    <h3 className="text-2xl font-bold text-gray-800 mb-4">Comments & Feedback</h3>
                     <textarea value={grades.comments} onChange={e => setGrades(g => g ? { ...g, comments: e.target.value } : null)} disabled={isReadOnly} rows={6} className="w-full p-3 border rounded-md disabled:bg-gray-100" placeholder="Enter your overall comments for the group here..."/>
                 </div>
 

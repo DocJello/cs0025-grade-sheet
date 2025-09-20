@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 export const DashboardIcon: React.FC<{ className?: string }> = ({ className }) => (
@@ -48,15 +49,9 @@ export const TrashIcon: React.FC<{ className?: string }> = ({ className }) => (
     </svg>
 );
 
+// FIX: Add onClick prop to allow the icon to be interactive.
 export const InfoIcon: React.FC<{ className?: string; onClick?: React.MouseEventHandler<SVGSVGElement> }> = ({ className, onClick }) => (
   <svg xmlns="http://www.w3.org/2000/svg" className={className} onClick={onClick} fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
   </svg>
-);
-
-export const SparklesIcon: React.FC<{ className?: string }> = ({ className }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m1-12a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1h-6a1 1 0 01-1-1V6z" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h.01M17 15v.01M17 19v.01M19 17h.01M12 21v-1m0-17V3" />
-    </svg>
 );

@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 
@@ -9,7 +8,7 @@ const ChangePassword: React.FC = () => {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
-    const [isUpdating, setIsUpdating] = useState(false);
+    const [loading, setLoading] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -24,18 +23,19 @@ const ChangePassword: React.FC = () => {
             setError('New password must be at least 8 characters long.');
             return;
         }
-        
-        setIsUpdating(true);
-        const isSuccess = await changePassword(oldPassword, newPassword);
-        setIsUpdating(false);
 
-        if (isSuccess) {
+        setLoading(true);
+        try {
+            await changePassword(oldPassword, newPassword);
             setSuccess('Password changed successfully!');
             setOldPassword('');
             setNewPassword('');
             setConfirmPassword('');
-        } else {
+        } catch (err) {
             setError('Failed to change password. Please check your old password.');
+            console.error(err);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -93,10 +93,10 @@ const ChangePassword: React.FC = () => {
                     <div className="text-right">
                          <button
                             type="submit"
-                            disabled={isUpdating}
+                            disabled={loading}
                             className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-700 hover:bg-green-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-green-400"
                         >
-                            {isUpdating ? 'Updating...' : 'Update Password'}
+                            {loading ? 'Updating...' : 'Update Password'}
                         </button>
                     </div>
                 </form>
